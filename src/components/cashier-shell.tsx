@@ -66,6 +66,18 @@ export function CashierShell({ children }: { children: ReactNode }) {
             )}
           </div>
         </div>
+        {/* From tablet width the three screens move up here, and the bottom bar (a thumb reach on a phone) goes away. */}
+        <nav aria-label={tx('ক্যাশিয়ার মেনু', 'Cashier menu')} className="hidden gap-1 md:flex">
+          {NAV.map(({ href, bn, en, Icon }) => {
+            const on = path.startsWith(href);
+            return (
+              <Link key={href} href={href} aria-current={on ? 'page' : undefined} className={cn('flex min-h-11 items-center gap-2 rounded-full px-4 font-semibold', on ? 'bg-brand-soft font-bold text-brand-ink shadow-[inset_0_0_0_1px_rgba(230,1,44,0.12)]' : 'text-muted hover:bg-surface2 hover:text-ink')}>
+                <Icon size={20} aria-hidden="true" />
+                {tx(bn, en)}
+              </Link>
+            );
+          })}
+        </nav>
         <div className="flex flex-wrap items-center gap-2">
           {isManagement && (
             <ButtonLink href="/owner" variant="secondary" size="sm">
@@ -82,7 +94,7 @@ export function CashierShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-4 px-4 pb-6 md:px-10">{children}</main>
-      <nav aria-label={tx('ক্যাশিয়ার মেনু', 'Cashier menu')} className="sticky bottom-0 flex border-t border-line/70 bg-surface/90 shadow-[0_-10px_30px_-18px_rgba(32,27,24,0.25)] backdrop-blur-xl px-3 pb-[max(14px,env(safe-area-inset-bottom))] pt-2">
+      <nav aria-label={tx('ক্যাশিয়ার মেনু', 'Cashier menu')} className="sticky bottom-0 z-20 flex border-t border-line/70 bg-surface/90 shadow-[0_-10px_30px_-18px_rgba(32,27,24,0.25)] backdrop-blur-xl px-3 pb-[max(14px,env(safe-area-inset-bottom))] pt-2 md:hidden">
         {NAV.map(({ href, bn, en, Icon }) => {
           const on = path.startsWith(href);
           return (

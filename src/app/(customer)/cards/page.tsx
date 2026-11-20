@@ -56,7 +56,9 @@ export default function CardsPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Shortcuts and recent activity: stacked on a phone, side by side from a laptop width. */}
+      <div className="grid gap-[18px] lg:grid-cols-5 lg:items-start">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-1">
         <Link href="/rewards" className="flex items-center gap-3 rounded-[20px] border border-line bg-surface p-3.5 hover:bg-surface2">
           <IconChip color="#E6012C" size={46}><Gift size={22} aria-hidden="true" /></IconChip>
           <span className="min-w-0 flex-1">
@@ -78,7 +80,7 @@ export default function CardsPage() {
         </Link>
       </div>
 
-      <Card>
+      <Card className="lg:col-span-3">
         <CardTitle action={<Link href="/history" className="text-sm font-bold">{tx('সব দেখুন', 'See all')}</Link>}>{tx('সাম্প্রতিক', 'Recent activity')}</CardTitle>
         {loading ? (
           <div role="status" aria-label={tx('লোড হচ্ছে', 'Loading')} className="flex flex-col gap-3 py-2">
@@ -103,6 +105,7 @@ export default function CardsPage() {
           </ul>
         )}
       </Card>
+      </div>
     </>
   );
 }

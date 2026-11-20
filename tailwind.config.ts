@@ -72,6 +72,11 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateX(-28px)' },
           '100%': { opacity: '1', transform: 'translateX(0)' },
         },
+        'otp-shake': {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '20%, 60%': { transform: 'translateX(-6px)' },
+          '40%, 80%': { transform: 'translateX(6px)' },
+        },
         sheen: {
           '0%': { transform: 'translateX(-160%) skewX(-20deg)' },
           '55%, 100%': { transform: 'translateX(460%) skewX(-20deg)' },
@@ -84,6 +89,7 @@ const config: Config = {
         'pop-in': 'pop-in 280ms ease-out both',
         'bar-in-right': 'bar-in-right 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         'bar-in-left': 'bar-in-left 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'otp-shake': 'otp-shake 360ms ease-in-out both',
         sheen: 'sheen 7s ease-in-out infinite',
       },
     },

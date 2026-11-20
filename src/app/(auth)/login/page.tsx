@@ -1,11 +1,12 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button, Field, Notice } from '@/components/ui';
 import { Mascot } from '@/components/brand';
+import { OtpInput } from '@/components/otp-input';
 import { api } from '@/lib/api/client';
 import { errorText, retryAfter } from '@/lib/api/messages';
 import { safeNext, useSession } from '@/lib/api/session';
@@ -52,7 +53,6 @@ function LoginForm() {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const boxes = useRef<(HTMLInputElement | null)[]>([]);
 
   // Already signed in on this phone: go straight to the card.
   useEffect(() => {
@@ -83,7 +83,6 @@ function LoginForm() {
       setOtp(['', '', '', '', '', '']);
       setOtpError(null);
       setStep('otp');
-      setTimeout(() => boxes.current[0]?.focus(), 50);
     } catch (e) {
       setPhoneError(errorText(e));
       const wait = retryAfter(e);
@@ -93,34 +92,18 @@ function LoginForm() {
     }
   };
 
-  const setDigit = (i: number, v: string) => {
-    const digits = v.replace(/\D/g, '');
-    if (digits.length > 1) {
-      // A pasted or auto-filled code: spread it over the boxes.
-      const next6 = digits.slice(0, 6).split('');
-      setOtp(Array.from({ length: 6 }, (_, k) => next6[k] ?? ''));
-      boxes.current[Math.min(next6.length, 5)]?.focus();
-      setOtpError(null);
-      return;
-    }
-    const d = digits.slice(-1);
-    const copy = [...otp];
-    copy[i] = d;
-    setOtp(copy);
-    setOtpError(null);
-    if (d && i < 5) boxes.current[i + 1]?.focus();
-  };
-
-  const verify = async () => {
-    if (!challenge) return;
-    if (otp.some((d) => !d)) {
+  // Runs by itself the moment the sixth digit is typed (or pasted); the Verify button is the fallback.
+  const verify = async (typed?: string) => {
+    if (!challenge || busy) return;
+    const code = typed ?? otp.join('');
+    if (code.length !== 6) {
       setOtpError({ bn: '৬ সংখ্যার কোডটি পুরো লিখুন', en: 'Enter all 6 digits of the code' });
       return;
     }
     setBusy(true);
     setOtpError(null);
     try {
-      const r = await api.post<{ isNew: boolean; profileComplete: boolean }>('/api/auth/otp/verify', { challengeId: challenge.challengeId, code: otp.join(''), language: document.documentElement.lang === 'bn' ? 'bn' : 'en' });
+      const r = await api.post<{ isNew: boolean; profileComplete: boolean }>('/api/auth/otp/verify', { challengeId: challenge.challengeId, code, language: document.documentElement.lang === 'bn' ? 'bn' : 'en' });
       router.push(r.profileComplete ? safeNext(next, '/cards') : '/setup');
     } catch (e) {
       setOtpError(errorText(e));
@@ -174,25 +157,14 @@ function LoginForm() {
             {process.env.NODE_ENV !== 'production' && challenge?.mode === 'fixed' && (
               <Notice tone="warn">{tx('ডেভেলপমেন্ট মোড: কোনো SMS যায়নি। .env.local ফাইলের DEV_OTP_CODE কোডটি লিখুন।', 'Development mode: no SMS was sent. Enter the DEV_OTP_CODE from your .env.local file.')}</Notice>
             )}
-            <fieldset>
-              <legend className="sr-only">{tx('OTP কোড', 'One-time code')}</legend>
-              <div className="grid grid-cols-6 gap-2">
-                {otp.map((d, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { boxes.current[i] = el; }}
-                    aria-label={tx(`সংখ্যা ${n(i + 1)}`, `Digit ${i + 1}`)}
-                    inputMode="numeric"
-                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
-                    value={d}
-                    onChange={(e) => setDigit(i, e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Backspace' && !otp[i] && i > 0) boxes.current[i - 1]?.focus(); }}
-                    className={cn('h-[60px] min-w-0 rounded-[14px] border-2 text-center text-2xl font-bold outline-none focus:border-tangerine', d ? 'border-brand bg-brand-soft' : 'border-line2 bg-surface')}
-                  />
-                ))}
-              </div>
-              {otpError && <p role="alert" className="mt-2 text-[13px] font-semibold text-danger">{l(otpError)}</p>}
-            </fieldset>
+            <OtpInput
+              value={otp}
+              onChange={(v) => { setOtp(v); setOtpError(null); }}
+              onComplete={(code) => void verify(code)}
+              checking={busy}
+              disabled={busy}
+              error={otpError ? l(otpError) : undefined}
+            />
             <p className="text-[15px] text-muted">
               {waitSeconds > 0 ? (
                 tx(`কোড পাননি? ০:${n(String(waitSeconds).padStart(2, '0'))} পরে আবার পাঠাতে পারবেন`, `Didn’t get it? Resend in 0:${String(waitSeconds).padStart(2, '0')}`)

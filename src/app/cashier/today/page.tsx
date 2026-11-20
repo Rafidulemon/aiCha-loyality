@@ -23,12 +23,13 @@ export default function CashierToday() {
     <>
       <h1 className="font-display text-[28px] font-bold">{tx('আজকের হিসাব', 'Today')}</h1>
       {today.failed && <Notice tone="danger">{tx('আজকের হিসাব লোড করা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।', 'Could not load today’s figures. Check your connection and try again.')}</Notice>}
-      <Card>
-        <dl className="grid grid-cols-[1fr_auto] gap-y-3 text-[15px]">
+      {/* A list on a phone; four tiles side by side from tablet width. */}
+      <Card className="md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+        <dl className="grid grid-cols-[1fr_auto] gap-y-3 text-[15px] md:grid-cols-4 md:gap-3">
           {rows.map(([k, v]) => (
-            <div key={k} className="contents">
+            <div key={k} className="contents md:flex md:flex-col-reverse md:justify-between md:gap-1 md:rounded-card md:border md:border-line md:bg-surface md:p-4 md:shadow-soft">
               <dt className="text-muted">{k}</dt>
-              <dd className="text-right text-lg font-extrabold">{today.ready ? n(v) : '–'}</dd>
+              <dd className="text-right text-lg font-extrabold md:text-left md:font-display md:text-[34px] md:leading-none">{today.ready ? n(v) : '–'}</dd>
             </div>
           ))}
         </dl>

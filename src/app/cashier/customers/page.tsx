@@ -59,12 +59,12 @@ export default function CashierCustomers() {
             : tx('কোনো গ্রাহক পাওয়া যায়নি।', 'No customers match.')}
         </p>
       ) : (
-        <ul className="rounded-card border border-line bg-surface px-4">
+        <ul className="rounded-card border border-line bg-surface px-4 md:grid md:grid-cols-2 md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:px-0">
           {list.items.map((row) => {
             const c = toCustomer(row);
             return (
-              <li key={c.id}>
-                <Link href={`/cashier/customers/${c.id}`} className="flex min-h-16 items-center gap-3 border-b border-line py-2 text-ink last:border-0">
+              <li key={c.id} className="border-b border-line last:border-0 md:rounded-card md:border md:bg-surface md:px-4 md:shadow-soft md:last:border">
+                <Link href={`/cashier/customers/${c.id}`} className="flex min-h-16 items-center gap-3 py-2 text-ink">
                   <IconChip color={c.avatar}>{l(c.initial)}</IconChip>
                   <span className="min-w-0 flex-1">
                     <span className="block break-words font-bold">{l(c.name)}</span>

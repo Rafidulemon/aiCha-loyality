@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { OtpInput } from '@/components/otp-input';
@@ -61,13 +62,15 @@ function StaffLogin() {
     }
   };
 
-  const submitCode = async () => {
-    if (step.kind !== 'code') return;
-    if (code.some((d) => !d)) return setError({ bn: '৬ সংখ্যার কোডটি পুরো লিখুন', en: 'Enter all 6 digits of the code' });
+  // Runs by itself when the sixth digit goes in; the Verify button is the fallback.
+  const submitCode = async (typed?: string) => {
+    if (step.kind !== 'code' || busy) return;
+    const entered = typed ?? code.join('');
+    if (entered.length !== 6) return setError({ bn: '৬ সংখ্যার কোডটি পুরো লিখুন', en: 'Enter all 6 digits of the code' });
     setBusy(true);
     setError(null);
     try {
-      await api.post('/api/auth/staff/otp', { challengeId: step.challengeId, code: code.join('') });
+      await api.post('/api/auth/staff/otp', { challengeId: step.challengeId, code: entered });
       await finish();
     } catch (e) {
       setError(errorText(e));
@@ -94,6 +97,7 @@ function StaffLogin() {
             <Field id="staff-pin" label={tx('৬ সংখ্যার PIN', '6-digit PIN')} error={error ? l(error) : undefined}>
               <input id="staff-pin" type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} placeholder="••••••" value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '')); setError(null); }} className={`${inputClass} h-14 text-center font-mono text-2xl tracking-[0.4em]`} />
             </Field>
+            <Link href="/staff/forgot-pin" className="-mt-1 self-end text-sm font-bold text-brand-ink underline underline-offset-4">{tx('PIN ভুলে গেছেন?', 'Forgot your PIN?')}</Link>
             <Button type="submit" size="lg" disabled={busy}>
               <Lock size={18} aria-hidden="true" />
               {busy ? tx('যাচাই হচ্ছে…', 'Checking…') : tx('লগইন', 'Sign in')}
@@ -109,12 +113,11 @@ function StaffLogin() {
               <p className="mt-1 text-muted">{tx(`+880 ${n(phone)} নম্বরে পাঠানো ৬ সংখ্যার কোড। ম্যানেজার ও মালিকদের দুই ধাপে লগইন করতে হয়।`, `We sent a 6-digit code to +880 ${phone}. Managers and owners sign in in two steps.`)}</p>
             </div>
             {process.env.NODE_ENV !== 'production' && step.mode === 'fixed' && <Notice tone="warn">{tx('ডেভেলপমেন্ট মোড: কোনো SMS যায়নি। .env.local ফাইলের DEV_OTP_CODE কোডটি লিখুন।', 'Development mode: no SMS was sent. Enter the DEV_OTP_CODE from your .env.local file.')}</Notice>}
-            <OtpInput value={code} onChange={(v) => { setCode(v); setError(null); }} error={error ? l(error) : undefined} />
+            <OtpInput value={code} onChange={(v) => { setCode(v); setError(null); }} onComplete={(c) => void submitCode(c)} checking={busy} disabled={busy} error={error ? l(error) : undefined} />
             <Button type="submit" size="lg" disabled={busy}>{busy ? tx('যাচাই হচ্ছে…', 'Checking…') : tx('যাচাই করুন', 'Verify')}</Button>
           </form>
         )}
       </Card>
-      <p className="text-center text-[13px] text-muted">{tx('PIN ভুলে গেলে মালিককে রিসেট করতে বলুন।', 'Forgot your PIN? Ask the owner to reset it.')}</p>
     </div>
   );
 }
