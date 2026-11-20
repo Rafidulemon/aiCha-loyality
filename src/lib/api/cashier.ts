@@ -234,6 +234,42 @@ type QrDetector = { detect(source: CanvasImageSource): Promise<{ rawValue: strin
 type DetectorCtor = { new (options?: { formats?: string[] }): QrDetector; getSupportedFormats?: () => Promise<string[]> };
 const detectorCtor = () => (typeof window === 'undefined' ? undefined : (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector);
 
+/**
+ * A QR reader for browsers without BarcodeDetector (desktop Chrome on Windows and Linux, Safari, Firefox): it draws each video frame
+ * to a small canvas and decodes it with jsQR, which is loaded only when it is needed.
+ */
+async function softwareDetector(): Promise<QrDetector> {
+  const { default: jsQR } = await import('jsqr');
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  return {
+    async detect(source) {
+      const video = source as HTMLVideoElement;
+      if (!ctx || !video.videoWidth) return [];
+      const scale = Math.min(1, 640 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const hit = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+      return hit?.data ? [{ rawValue: hit.data }] : [];
+    },
+  };
+}
+
+/** The browser's own detector when it reads QR codes, otherwise the software one. */
+async function makeDetector(): Promise<QrDetector> {
+  const Ctor = detectorCtor();
+  if (Ctor) {
+    try {
+      const formats = Ctor.getSupportedFormats ? await Ctor.getSupportedFormats() : ['qr_code'];
+      if (formats.includes('qr_code')) return new Ctor({ formats: ['qr_code'] });
+    } catch {
+      // Fall through to the software reader.
+    }
+  }
+  return softwareDetector();
+}
+
 function cameraProblem(e: unknown): Text {
   const name = (e as { name?: string } | null)?.name;
   if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -252,7 +288,7 @@ export type ScannerState =
   | 'scanning';
 
 /**
- * Reads QR codes with the rear camera through the browser's BarcodeDetector. It never asks for the camera by itself: `start()` is
+ * Reads QR codes with the rear camera (the browser's BarcodeDetector, or jsQR where there is none). It never asks for the camera by itself: `start()` is
  * called from a button. Every QR it sees goes to `onCode`; return true when the code was used (the camera then stops) and false to
  * keep looking. The camera is released when scanning ends, when the tab is hidden and when the screen goes away.
  */
@@ -271,25 +307,10 @@ export function useQrScanner(onCode: (value: string) => boolean) {
     onCodeRef.current = onCode;
   });
 
-  // Can this browser scan at all? Checked after mount, so the server's page and the first client render agree.
+  // Can this browser scan at all? Only a camera is needed: without BarcodeDetector the software reader does the decoding.
+  // Checked after mount, so the server's page and the first client render agree.
   useEffect(() => {
-    const Ctor = detectorCtor();
-    if (!Ctor || !navigator.mediaDevices?.getUserMedia) {
-      setState('unsupported');
-      return;
-    }
-    let alive = true;
-    (async () => {
-      try {
-        const formats = Ctor.getSupportedFormats ? await Ctor.getSupportedFormats() : ['qr_code'];
-        if (alive) setState(formats.includes('qr_code') ? 'idle' : 'unsupported');
-      } catch {
-        if (alive) setState('unsupported');
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    setState(typeof navigator.mediaDevices?.getUserMedia === 'function' ? 'idle' : 'unsupported');
   }, []);
 
   const release = useCallback(() => {
@@ -311,14 +332,13 @@ export function useQrScanner(onCode: (value: string) => boolean) {
   }, [release]);
 
   const start = useCallback(async () => {
-    const Ctor = detectorCtor();
-    if (!Ctor || activeRef.current) return;
+    if (activeRef.current) return;
     activeRef.current = true;
     const run = ++runRef.current;
     setError(null);
     setState('starting');
     try {
-      const detector = new Ctor({ formats: ['qr_code'] });
+      const detector = await makeDetector();
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
       if (run !== runRef.current) {
         // Stopped, or the screen left, while the browser was asking for permission.

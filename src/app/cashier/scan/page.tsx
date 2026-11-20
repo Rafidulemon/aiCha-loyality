@@ -87,7 +87,7 @@ function QrTile({ onVoucher }: { onVoucher: (code: string) => void }) {
         {state === 'unsupported' ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
             <CameraOff size={40} aria-hidden="true" />
-            <p className="text-base font-semibold">{tx('এই ব্রাউজারে ক্যামেরা দিয়ে স্ক্যান করা যায় না। মোবাইল নম্বর দিয়ে খুঁজুন।', 'Camera scanning is not available in this browser. Search by mobile number instead.')}</p>
+            <p className="text-base font-semibold">{tx('এই ডিভাইসে বা সংযোগে ক্যামেরা পাওয়া যাচ্ছে না (ক্যামেরা লাগে, আর সাইট https-এ খুলতে হয়)। মোবাইল নম্বর দিয়ে খুঁজুন।', 'No camera is available here (a camera is needed, and the site must be opened over https). Search by mobile number instead.')}</p>
           </div>
         ) : (
           <>
@@ -312,6 +312,17 @@ export default function ScanPage() {
             </div>
           </Field>
         </form>
+
+        {!unknown && (
+          <button
+            type="button"
+            onClick={() => { setUnknown(true); setMatches(null); setPhoneError(null); setVerifying(false); }}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 font-bold"
+          >
+            <UserPlus size={20} aria-hidden="true" />
+            {tx('নতুন গ্রাহক যোগ করুন', 'Add a new customer')}
+          </button>
+        )}
 
         {matches && (
           <Card className="flex flex-col gap-1 p-4">
