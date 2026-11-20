@@ -24,6 +24,12 @@ const schema = z
     /** "sms": a random code goes out by SMS. "fixed": everyone uses DEV_OTP_CODE, development only. */
     OTP_MODE: z.enum(['fixed', 'sms']).default('sms'),
     DEV_OTP_CODE: z.string().regex(/^\d{6}$/, 'DEV_OTP_CODE must be exactly 6 digits').optional(),
+    /**
+     * TEMPORARY escape hatch: lets a production server use OTP_MODE=fixed (one shared sign-in code for everyone) and the console SMS
+     * provider until a real SMS gateway is connected. Anyone who knows the code can sign in as any customer, and as staff who know
+     * the PIN, so keep the code secret and remove this switch as soon as the gateway is live.
+     */
+    ALLOW_FIXED_OTP_IN_PRODUCTION: z.enum(['true', 'false']).default('false'),
     /** "console" prints messages on the server, so it never reaches a real phone. A gateway adapter comes with the contract. */
     SMS_PROVIDER: z.enum(['console']).default('console'),
     /** Lets the scheduler (Vercel Cron) call /api/cron/*. Without it those routes are off. */
@@ -36,22 +42,26 @@ const schema = z
   })
   .superRefine((v, ctx) => {
     const production = v.NODE_ENV === 'production';
+    const fixedAllowed = v.ALLOW_FIXED_OTP_IN_PRODUCTION === 'true';
     const vapid = [v.VAPID_PUBLIC_KEY, v.VAPID_PRIVATE_KEY, v.VAPID_SUBJECT];
     if (vapid.some(Boolean) && !vapid.every(Boolean)) {
       for (const [name, value] of [['VAPID_PUBLIC_KEY', v.VAPID_PUBLIC_KEY], ['VAPID_PRIVATE_KEY', v.VAPID_PRIVATE_KEY], ['VAPID_SUBJECT', v.VAPID_SUBJECT]] as const) {
         if (!value) ctx.addIssue({ code: 'custom', path: [name], message: `${name} is required when any other VAPID setting is set (web push needs all three)` });
       }
     }
-    if (v.OTP_MODE === 'fixed' && production) {
-      ctx.addIssue({ code: 'custom', path: ['OTP_MODE'], message: 'OTP_MODE=fixed is for development only and is refused in production' });
+    if (v.OTP_MODE === 'fixed' && production && !fixedAllowed) {
+      ctx.addIssue({ code: 'custom', path: ['OTP_MODE'], message: 'OTP_MODE=fixed is for development only and is refused in production (unless ALLOW_FIXED_OTP_IN_PRODUCTION=true)' });
     }
     if (v.OTP_MODE === 'fixed' && !v.DEV_OTP_CODE) {
       ctx.addIssue({ code: 'custom', path: ['DEV_OTP_CODE'], message: 'DEV_OTP_CODE is required when OTP_MODE=fixed' });
     }
-    if (production && v.DEV_OTP_CODE) {
+    if (fixedAllowed && !(production && v.OTP_MODE === 'fixed')) {
+      ctx.addIssue({ code: 'custom', path: ['ALLOW_FIXED_OTP_IN_PRODUCTION'], message: 'ALLOW_FIXED_OTP_IN_PRODUCTION only makes sense in production with OTP_MODE=fixed' });
+    }
+    if (production && v.DEV_OTP_CODE && !fixedAllowed) {
       ctx.addIssue({ code: 'custom', path: ['DEV_OTP_CODE'], message: 'DEV_OTP_CODE must not be set in production' });
     }
-    if (production && v.SMS_PROVIDER === 'console') {
+    if (production && v.SMS_PROVIDER === 'console' && !fixedAllowed) {
       ctx.addIssue({ code: 'custom', path: ['SMS_PROVIDER'], message: 'The console SMS provider cannot be used in production: connect an SMS gateway first' });
     }
   });

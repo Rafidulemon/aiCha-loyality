@@ -171,7 +171,7 @@ function LoginForm() {
               <h1 className="font-display text-[clamp(28px,4vw,40px)] font-bold leading-tight">{tx('কোডটি লিখুন', 'Enter the code')}</h1>
               <p className="mt-2 text-muted">{tx(`+880 ${n(phone)} নম্বরে পাঠানো ৬ সংখ্যার কোড`, `Sent to +880 ${phone}`)}</p>
             </div>
-            {challenge?.mode === 'fixed' && (
+            {process.env.NODE_ENV !== 'production' && challenge?.mode === 'fixed' && (
               <Notice tone="warn">{tx('ডেভেলপমেন্ট মোড: কোনো SMS যায়নি। .env.local ফাইলের DEV_OTP_CODE কোডটি লিখুন।', 'Development mode: no SMS was sent. Enter the DEV_OTP_CODE from your .env.local file.')}</Notice>
             )}
             <fieldset>

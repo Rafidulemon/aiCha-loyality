@@ -128,6 +128,16 @@ describe('environment check', () => {
     expect(() => env()).toThrow(/console SMS provider cannot be used in production/);
   });
 
+  it('allows the fixed OTP in production only with the explicit temporary switch', () => {
+    set({ NODE_ENV: 'production', OTP_MODE: 'fixed', DEV_OTP_CODE: '123456', ALLOW_FIXED_OTP_IN_PRODUCTION: 'true' });
+    expect(env()).toMatchObject({ OTP_MODE: 'fixed', ALLOW_FIXED_OTP_IN_PRODUCTION: 'true' });
+  });
+
+  it('refuses the temporary switch when the OTP is not fixed, so it cannot linger unnoticed', () => {
+    set({ NODE_ENV: 'production', OTP_MODE: 'sms', DEV_OTP_CODE: undefined, ALLOW_FIXED_OTP_IN_PRODUCTION: 'true' });
+    expect(() => env()).toThrow(/ALLOW_FIXED_OTP_IN_PRODUCTION only makes sense/);
+  });
+
   it('needs a code when the OTP is fixed', () => {
     set({ DEV_OTP_CODE: undefined });
     expect(() => env()).toThrow(/DEV_OTP_CODE is required/);

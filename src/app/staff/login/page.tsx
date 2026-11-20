@@ -108,7 +108,7 @@ function StaffLogin() {
               <h2 className="font-display text-2xl font-bold">{tx('কোডটি লিখুন', 'Enter the code')}</h2>
               <p className="mt-1 text-muted">{tx(`+880 ${n(phone)} নম্বরে পাঠানো ৬ সংখ্যার কোড। ম্যানেজার ও মালিকদের দুই ধাপে লগইন করতে হয়।`, `We sent a 6-digit code to +880 ${phone}. Managers and owners sign in in two steps.`)}</p>
             </div>
-            {step.mode === 'fixed' && <Notice tone="warn">{tx('ডেভেলপমেন্ট মোড: কোনো SMS যায়নি। .env.local ফাইলের DEV_OTP_CODE কোডটি লিখুন।', 'Development mode: no SMS was sent. Enter the DEV_OTP_CODE from your .env.local file.')}</Notice>}
+            {process.env.NODE_ENV !== 'production' && step.mode === 'fixed' && <Notice tone="warn">{tx('ডেভেলপমেন্ট মোড: কোনো SMS যায়নি। .env.local ফাইলের DEV_OTP_CODE কোডটি লিখুন।', 'Development mode: no SMS was sent. Enter the DEV_OTP_CODE from your .env.local file.')}</Notice>}
             <OtpInput value={code} onChange={(v) => { setCode(v); setError(null); }} error={error ? l(error) : undefined} />
             <Button type="submit" size="lg" disabled={busy}>{busy ? tx('যাচাই হচ্ছে…', 'Checking…') : tx('যাচাই করুন', 'Verify')}</Button>
           </form>
