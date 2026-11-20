@@ -94,6 +94,7 @@ export function toMeDto(c: Customer): MeDto {
     language: c.language === 'BN' ? 'bn' : 'en',
     joinedAt: c.joinedAt.toISOString(),
     profileComplete: c.profileCompletedAt !== null,
+    passwordSet: c.passwordHash !== null,
   };
 }
 

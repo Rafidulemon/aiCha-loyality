@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bell, CreditCard, Gift, Tag, User } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { BrandLogo } from './brand';
@@ -26,6 +26,11 @@ export function CustomerShell({ children }: { children: ReactNode }) {
   const { tx, n } = useI18n();
   const { ready, me, readyVouchers, unclaimed } = useWallet();
   const { unread } = useNotifications();
+  // The first sign-in uses a one-time password; until the customer has chosen their own, nothing else opens.
+  const router = useRouter();
+  useEffect(() => {
+    if (ready && me && !me.passwordSet) router.replace('/auth/set-password');
+  }, [ready, me, router]);
   // A phone shared between people: notifications someone else turned on for this browser must not show this person's stamps.
   useEffect(() => {
     if (me?.id) void dropForeignSubscription(me.id).catch(() => undefined);

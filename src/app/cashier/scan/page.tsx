@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { mutate } from 'swr';
 import { Camera, CameraOff, Check, ChevronRight, Gift, Plus, Search, Ticket, UserPlus, X } from 'lucide-react';
+import { CustomerVerify } from '@/components/customer-verify';
 import { Badge, Button, Card, Field, IconChip, Notice, inputClass } from '@/components/ui';
 import { toCustomer, toVoucher } from '@/lib/api/adapters';
 import { api, isApiError, withQuery } from '@/lib/api/client';
@@ -144,7 +145,8 @@ export default function ScanPage() {
   const [unknown, setUnknown] = useState(false);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState<Text | null>(null);
-  const [adding, setAdding] = useState(false);
+  /** True once the name is entered: the code step (sent to the customer's phone) is showing. */
+  const [verifying, setVerifying] = useState(false);
   const [addError, setAddError] = useState<Text | null>(null);
 
   // Redeem a voucher by its code.
@@ -165,6 +167,7 @@ export default function ScanPage() {
   const search = async () => {
     if (searching) return;
     setUnknown(false);
+    setVerifying(false);
     setMatches(null);
     setAddError(null);
     if (digits.length < 4) return setPhoneError(SHORT_NUMBER);
@@ -189,22 +192,28 @@ export default function ScanPage() {
     }
   };
 
-  const addCustomer = async () => {
-    if (adding || !fullNumber) return;
+  /** Step one: check the name, then show the code step (it sends the code to the customer's phone). */
+  const startAdding = () => {
+    if (!fullNumber) return;
     const clean = name.replace(/\s+/g, ' ').trim();
     if (clean.length < 2) return setNameError(t('গ্রাহকের নাম লিখুন', 'Enter the customer’s name'));
-    setAdding(true);
     setAddError(null);
+    setVerifying(true);
+  };
+
+  /** Step two: the customer read out the code sent to their phone; it is checked together with the registration. */
+  const addCustomer = async (challengeId: string, verification: string) => {
+    if (!fullNumber) return;
+    const clean = name.replace(/\s+/g, ' ').trim();
     try {
-      const created = await api.post<CashierCustomerDto>('/api/cashier/customers', { name: clean, phone: fullNumber });
+      const created = await api.post<CashierCustomerDto>('/api/cashier/customers', { name: clean, phone: fullNumber, challengeId, code: verification });
       // The customer page opens with this card already in hand; it still reloads it from the server.
       await mutate(cashierKeys.customer(created.customer.id), created, { revalidate: false });
       void mutate(cashierKeys.today);
       router.push(`/cashier/customers/${created.customer.id}`);
     } catch (e) {
       checkSignedOut(e);
-      setAddError(errorText(e));
-      setAdding(false);
+      throw e;
     }
   };
 
@@ -335,16 +344,21 @@ export default function ScanPage() {
             ) : !fullNumber ? (
               <p className="text-sm text-muted">{tx('এটি সঠিক মোবাইল নম্বর নয়। নম্বরটি দেখে আবার লিখুন।', 'That is not a valid mobile number. Check it and type it again.')}</p>
             ) : (
-              <form onSubmit={(e) => { e.preventDefault(); void addCustomer(); }} className="flex flex-col gap-3">
-                <p className="text-sm text-muted">{tx('নম্বর', 'Number')}: <span className="font-bold text-ink">{formatPhone(fullNumber)}</span></p>
-                <Field id="new-name" label={tx('গ্রাহকের নাম', 'Customer name')} error={nameError ? l(nameError) : undefined}>
-                  <input id="new-name" autoComplete="off" maxLength={80} value={name} onChange={(e) => { setName(e.target.value); setNameError(null); }} placeholder={tx('যেমন: তানভীর আহমেদ', 'e.g. Tanvir Ahmed')} className={inputClass} />
-                </Field>
-                {addError && <Notice tone="danger">{l(addError)}</Notice>}
-                <Button type="submit" disabled={adding}>
-                  {adding ? tx('যোগ হচ্ছে…', 'Adding…') : shop.program.welcome ? tx('গ্রাহক যোগ করুন · ১টি স্বাগতম Stamp', 'Add customer · 1 welcome stamp') : tx('গ্রাহক যোগ করুন', 'Add customer')}
-                </Button>
-              </form>
+              verifying ? (
+                <CustomerVerify phone={fullNumber} requestUrl="/api/cashier/customers/code" onVerified={addCustomer} onBack={() => setVerifying(false)} />
+              ) : (
+                <form onSubmit={(e) => { e.preventDefault(); startAdding(); }} className="flex flex-col gap-3">
+                  <p className="text-sm text-muted">{tx('নম্বর', 'Number')}: <span className="font-bold text-ink">{formatPhone(fullNumber)}</span></p>
+                  <Field id="new-name" label={tx('গ্রাহকের নাম', 'Customer name')} error={nameError ? l(nameError) : undefined}>
+                    <input id="new-name" autoComplete="off" maxLength={80} value={name} onChange={(e) => { setName(e.target.value); setNameError(null); }} placeholder={tx('যেমন: তানভীর আহমেদ', 'e.g. Tanvir Ahmed')} className={inputClass} />
+                  </Field>
+                  {addError && <Notice tone="danger">{l(addError)}</Notice>}
+                  <Button type="submit">
+                    {tx('গ্রাহকের ফোনে কোড পাঠান', 'Send a code to the customer’s phone')}
+                  </Button>
+                  <p className="text-[13px] text-muted">{shop.program.welcome ? tx('কোড মিললে গ্রাহক যোগ হবে ও ১টি স্বাগতম Stamp পাবেন।', 'Once the code matches, the customer is added with 1 welcome stamp.') : tx('কোড মিললে গ্রাহক যোগ হবে।', 'Once the code matches, the customer is added.')}</p>
+                </form>
+              )
             )}
           </Card>
         )}

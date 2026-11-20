@@ -20,6 +20,16 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  /** The old addresses keep working: bookmarks and links sent before the sign-in screens moved under /auth, and /owner became /admin. */
+  async redirects() {
+    return [
+      { source: '/login', destination: '/auth/login', permanent: true },
+      { source: '/staff/login', destination: '/auth/cashier/login', permanent: true },
+      { source: '/staff/forgot-pin', destination: '/auth/cashier/forgot-password', permanent: true },
+      { source: '/owner', destination: '/admin', permanent: true },
+      { source: '/owner/:path*', destination: '/admin/:path*', permanent: true },
+    ];
+  },
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

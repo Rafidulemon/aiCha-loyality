@@ -123,6 +123,8 @@ export type MeDto = {
   joinedAt: Iso;
   /** False until the name has been given on the setup screen. */
   profileComplete: boolean;
+  /** False until the customer has chosen their own password (the first sign-in uses a one-time password). */
+  passwordSet: boolean;
 };
 
 /** Whether web push is switched on for the app, and how many of this customer's devices get notifications. */

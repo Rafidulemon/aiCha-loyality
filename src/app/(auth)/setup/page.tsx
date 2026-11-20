@@ -20,6 +20,11 @@ export default function SetupPage() {
   const router = useRouter();
   const { customer, loading } = useSession();
   const editing = !!customer?.profileComplete;
+
+  // The password comes first: someone who has not chosen one yet is sent there.
+  useEffect(() => {
+    if (!loading && customer && !customer.passwordSet) router.replace('/auth/set-password');
+  }, [loading, customer, router]);
   const [name, setName] = useState('');
   const [birthday, setBirthday] = useState('');
   const [email, setEmail] = useState('');

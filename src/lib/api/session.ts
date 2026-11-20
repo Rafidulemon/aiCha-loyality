@@ -15,14 +15,22 @@ export function useSession() {
   return { customer: data?.customer ?? null, staff: data?.staff ?? null, loading: isLoading, error, refresh: mutate };
 }
 
+/** The sign-in screen of the app a path belongs to: /admin has its own, /cashier has its own, everything else is the customer app. */
+export function signInPathFor(path: string): string {
+  if (path === '/admin' || path.startsWith('/admin/')) return '/auth/admin/login';
+  if (path === '/cashier' || path.startsWith('/cashier/')) return '/auth/cashier/login';
+  return '/auth/login';
+}
+
 /** Signs out and goes to the right sign-in screen. `everywhere` also ends every other device's session (MG-21). */
 export async function signOut(scope: 'customer' | 'staff', everywhere = false) {
+  const from = window.location.pathname;
   try {
     // This browser stops getting this person's notifications before the session ends (it needs the session to say so).
     if (scope === 'customer') await disablePush().catch(() => undefined);
     await api.post('/api/auth/logout', { scope, everywhere });
   } finally {
-    window.location.assign(scope === 'customer' ? '/login' : '/staff/login');
+    window.location.assign(scope === 'customer' ? '/auth/login' : signInPathFor(from));
   }
 }
 

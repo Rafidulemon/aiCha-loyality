@@ -46,30 +46,30 @@ Everything secret lives in `.env.local` (git-ignored). The server checks it on f
 
 | Who | Number | Signs in with |
 |---|---|---|
-| Customer Tanvir (and seven more, `…0102` to `…0108`) | +880 1700-000101 | The number, then `DEV_OTP_CODE` |
+| Customer Tanvir (and seven more, `…0102` to `…0108`) | +880 1700-000101 | The number, then `DEV_OTP_CODE` as the one-time password, then they choose their own password |
 | Owner Rafiq | +880 1700-000001 | PIN (`SEED_STAFF_PIN`), then `DEV_OTP_CODE` |
 | Manager Sohel (Dhanmondi) | +880 1700-000002 | PIN, then `DEV_OTP_CODE` |
 | Cashier Rakib (Dhanmondi) | +880 1700-000003 | PIN only |
 | Cashier Mitu (Dhanmondi) | +880 1700-000004 | PIN only |
 | Cashier Jui (Dhanmondi, switched off) | +880 1700-000005 | Cannot sign in |
 
-Customers sign in at `/login`, staff at `/staff/login`. The code and PIN are in `.env.local`. Asking for sign-in codes is rate limited like in production (30 seconds apart, 5 an hour per number), so a test script should keep its session instead of signing in again and again.
+Customers sign in at `/auth/login`, cashiers at `/auth/cashier/login` and management at `/auth/admin/login` (`/` sends each person to their own home, or to the customer sign-in when nobody is signed in). A customer's first sign-in uses the one-time password (in development `DEV_OTP_CODE`) and leads straight to "choose your password"; after that it is the number and the password. Forgot password is at `/auth/forgot-password` (a code, then a new password). The code and PIN are in `.env.local`. Asking for sign-in codes is rate limited like in production (30 seconds apart, 5 an hour per number), so a test script should keep its session instead of signing in again and again.
 
 ## The three apps
 
 | App | Start at | Screens |
 |---|---|---|
-| Customer (mobile-first) | `/login` | Sign-in (phone and code) → Profile setup → My card with a rotating QR → Card details → Rewards (vouchers) → Offers → Find us → History → Notifications → Profile (language, theme, offer SMS, push notifications) |
+| Customer (mobile-first) | `/auth/login` | Sign-in (phone and password; first time: one-time password, then choose a password) → Profile setup → My card with a rotating QR → Card details → Rewards (vouchers) → Offers → Find us → History → Notifications → Profile (language, theme, offer SMS, push notifications) |
 | Cashier | `/cashier/scan` | Scan the member QR (camera, where the browser supports it) or search by number or name, add a new customer, redeem a voucher by code → Add stamps (with undo and the daily limit) or give a reward → Customers → Today |
-| Management (web) | `/owner` | Dashboard → Customers (groups, search, export CSV) → Customer detail (adjust stamps, notes) → Loyalty card setup → Offers → SMS campaigns → Staff → Settings (outlets and opening hours) |
+| Management (web) | `/admin` | Dashboard → Customers (groups, search, export CSV) → Customer detail (adjust stamps, notes) → Loyalty card setup → Offers → SMS campaigns → Staff → Settings (outlets and opening hours) |
 
 **Try the live link.** The apps are three views of one database, so you can watch them agree:
 
 - Sign in as Tanvir on `/cards`, and as Rakib in another window on `/cashier/scan`. Search `000101` and add a stamp: the card presses a stamp in within a few seconds, with no reload. Completing a card unlocks a reward voucher on the customer side, and giving it at the counter (by customer or by typing its code) marks it used.
-- `/owner/offers` plus the customer's `/offers`: publish, edit or pause an offer and the customer's offers bar follows.
-- `/owner/program`: change the card name or colour, the reward items or the rules and every screen redraws. Lowering the stamps per card completes the cards of customers who already have enough (the screen shows how many first), and the cashier screen enforces the daily limit.
-- `/owner/customers/…`: adjusting a customer's stamps by hand (with a reason) changes their card and is recorded in the ledger and the audit log.
-- `/owner/settings`: change the outlet's opening hours.
+- `/admin/offers` plus the customer's `/offers`: publish, edit or pause an offer and the customer's offers bar follows.
+- `/admin/program`: change the card name or colour, the reward items or the rules and every screen redraws. Lowering the stamps per card completes the cards of customers who already have enough (the screen shows how many first), and the cashier screen enforces the daily limit.
+- `/admin/customers/…`: adjusting a customer's stamps by hand (with a reason) changes their card and is recorded in the ledger and the audit log.
+- `/admin/settings`: change the outlet's opening hours.
 
 Every screen supports **বাংলা / English** and **light / dark** (top-right switches). Both choices are saved in cookies, so they stay the same on every page and render on the server without flicker. All layouts work from 360px phones to large desktops.
 
@@ -123,7 +123,7 @@ A customer can turn on notifications for a browser or phone on the Profile scree
 | Area | Endpoints |
 |---|---|
 | Public | `GET /api/health`, `/api/program`, `/api/branches` |
-| Sign-in | `POST /api/auth/otp/request`, `/api/auth/otp/verify` (customers); `/api/auth/staff/login`, `/api/auth/staff/otp` (staff); `GET /api/auth/session`; `POST /api/auth/logout` |
+| Sign-in | `POST /api/auth/login`, `/api/auth/password/forgot`, `/verify`, `/reset`, `POST /api/me/password` (customers); `/api/auth/staff/login`, `/api/auth/staff/otp` (staff); `GET /api/auth/session`; `POST /api/auth/logout` |
 | Customer | `/api/me`, `/api/me/wallet`, `/api/me/version`, `/api/me/qr`, `/api/me/history`, `/api/me/notifications`, `/api/me/offers/[id]/claim`, `/api/me/delete`; push: `/api/me/push` (GET status, PUT subscribe), `/api/me/push/unsubscribe`, `/api/me/push/test` |
 | Cashier | `/api/cashier/me`, `/scan`, `/customers` (search, add), `/customers/[id]`, `/stamps`, `/stamps/[id]/undo`, `/vouchers/lookup`, `/vouchers/[id]/redeem`, `/today`; `POST /api/staff/pin` (change own PIN) |
 | Management | `/api/admin/dashboard`, `/customers` (+ `[id]`, `activity`, `adjust`, `note`, `export`), `/program` (+ `impact`), `/offers` (+ `[id]`, `status`), `/staff` (+ `[id]`, `reset-pin`), `/sms` (+ `campaigns`, `send`), `/branches` (+ `[id]`) |
@@ -140,8 +140,8 @@ src/
     (auth)/          customer login and profile setup
     (customer)/      cards (+ cards/details), rewards (+ rewards/[id]), offers, history, notifications, profile
     cashier/         scan, customers (+ customers/[id]), today
-    (owner)/owner/   dashboard and all management pages
-    staff/login      staff sign-in
+    (admin)/admin/   dashboard and all management pages
+    auth/            all sign-in screens: login, forgot/reset/set password, cashier/ and admin/ variants
     api/             the route handlers listed above
     layout.tsx       fonts, theme + language cookies
   components/        ui.tsx primitives, loyalty-card.tsx, the three shells, offer-bar.tsx, toggles.tsx, brand.tsx, otp-input.tsx

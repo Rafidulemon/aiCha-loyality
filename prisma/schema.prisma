@@ -70,6 +70,10 @@ enum OfferStatus {
 enum OtpPurpose {
   CUSTOMER_LOGIN
   STAFF_LOGIN
+  /// Sent to a new customer's phone when staff register them, to prove the number is theirs.
+  CUSTOMER_REGISTER
+  /// Sent to a customer who forgot their password.
+  CUSTOMER_RESET
 }
 
 enum ActorType {
@@ -177,40 +181,49 @@ model Program {
 // ---------------------------------------------------------------------------------------------
 
 model Customer {
-  id                 String      @id @default(uuid(7)) @db.Uuid
+  id                  String      @id @default(uuid(7)) @db.Uuid
   /// Short number staff can read out. Not secret and not used for sign-in.
-  memberNo           Int         @unique @default(autoincrement())
+  memberNo            Int         @unique @default(autoincrement())
   /// E.164, for example +8801712345678. One number is one account (BR-16).
-  phone              String      @unique
+  phone               String      @unique
   /// Null until the customer finishes the profile step after the first sign-in.
-  name               String?
+  name                String?
   /// Optional (BR-18). Only the day and month matter for the birthday offer. Once set it cannot be changed by the customer.
-  birthday           DateTime?   @db.Date
+  birthday            DateTime?   @db.Date
   /// Optional contact email, lower case. Not used for sign-in.
-  email              String?
+  email               String?
+  /// scrypt hash of the customer's own password (see src/server/crypto.ts). Null until they set one: the first sign-in uses the
+  /// one-time password and then sends them to the "set your password" screen.
+  passwordHash        String?
+  /// Hash of the one-time password sent by SMS when staff registered the customer. Null when OTP_MODE=fixed (everyone then uses DEV_OTP_CODE).
+  oneTimePasswordHash String?
+  passwordChangedAt   DateTime?   @db.Timestamptz(3)
+  /// Wrong passwords in a row. At five the account is locked for 15 minutes, like a staff PIN.
+  failedLoginAttempts Int         @default(0)
+  lockedUntil         DateTime?   @db.Timestamptz(3)
   /// Offer SMS go only to customers who agreed (BR-22).
-  smsConsent         Boolean     @default(false)
+  smsConsent          Boolean     @default(false)
   /// Push notifications for stamps and rewards. Allowed by default; the browser still has to give permission on each device.
-  pushNotify         Boolean     @default(true)
+  pushNotify          Boolean     @default(true)
   /// Email notifications. Allowed by default; only used when the customer has given an email address.
-  emailNotify        Boolean     @default(true)
-  language           Language    @default(EN)
-  joinedVia          JoinChannel
-  joinedAt           DateTime    @default(now()) @db.Timestamptz(3)
+  emailNotify         Boolean     @default(true)
+  language            Language    @default(EN)
+  joinedVia           JoinChannel
+  joinedAt            DateTime    @default(now()) @db.Timestamptz(3)
   /// The staff member who added them at the counter or from management.
-  createdById        String?     @db.Uuid
+  createdById         String?     @db.Uuid
   /// The outlet they were added at, for customers who joined at the counter. Feeds "which outlets enrol best" (section 15).
-  joinedBranchId     String?     @db.Uuid
-  profileCompletedAt DateTime?   @db.Timestamptz(3)
+  joinedBranchId      String?     @db.Uuid
+  profileCompletedAt  DateTime?   @db.Timestamptz(3)
   /// Private note for management (MG-06).
-  internalNote       String?
+  internalNote        String?
   /// Set when the customer asks for deletion (BR-25): name, phone and note are wiped, the ledger stays.
-  deletedAt          DateTime?   @db.Timestamptz(3)
-  createdAt          DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt          DateTime    @updatedAt @db.Timestamptz(3)
+  deletedAt           DateTime?   @db.Timestamptz(3)
+  createdAt           DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime    @updatedAt @db.Timestamptz(3)
 
-  createdBy     Staff?         @relation("CustomerAddedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  joinedBranch  Branch?        @relation("CustomerJoinedAt", fields: [joinedBranchId], references: [id], onDelete: SetNull)
+  createdBy     Staff?             @relation("CustomerAddedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  joinedBranch  Branch?            @relation("CustomerJoinedAt", fields: [joinedBranchId], references: [id], onDelete: SetNull)
   card          Card?
   stampEntries  StampEntry[]
   vouchers      Voucher[]

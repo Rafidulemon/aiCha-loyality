@@ -12,7 +12,15 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-import { completeCustomerLogin, requestCustomerCode } from '@/server/auth/customer';
+import {
+  confirmPasswordReset,
+  loginWithPassword,
+  registerCustomer,
+  requestPasswordReset,
+  requestRegistrationCode,
+  resetPassword,
+  setFirstPassword,
+} from '@/server/auth/customer';
 import { consumeOtp, issueOtp, OTP_RESEND_SEC, OTP_TTL_SEC } from '@/server/auth/otp';
 import { endSession, readCustomerSession, readStaffSession, revokeAllSessions } from '@/server/auth/session';
 import { approveOverride, completeStaffLogin, loginWithPin, resolveBranch } from '@/server/auth/staff';
@@ -86,57 +94,134 @@ describe('one-time codes (BR-16, NF-06)', () => {
   });
 });
 
-describe('customer sign-in (CU-01, BR-16, BR-17)', () => {
-  it('opens a card with the welcome stamp the first time, and signs the customer in', async () => {
-    const phone = uniquePhone();
-    const { challengeId } = await requestCustomerCode({ phone, ipHash: null });
-    const result = await completeCustomerLogin({ challengeId, code: CODE, ...meta });
+describe('customer accounts: registration, one-time password, own password (CU-01, BR-16, BR-17)', () => {
+  const PASSWORD = 'tea-and-ice-cream-42';
+  let cashier: Awaited<ReturnType<typeof makeStaff>>;
+  beforeAll(async () => {
+    cashier = await makeStaff('CASHIER', [branch.id], { pin: PIN });
+  });
 
-    expect(result).toMatchObject({ isNew: true, profileComplete: false });
+  /** Staff register a customer the way the screens do: a code to the customer's phone, then the registration. */
+  async function register(name = 'Registered Customer') {
+    const phone = uniquePhone();
+    const { challengeId } = await requestRegistrationCode({ phone, ipHash: null });
+    const result = await registerCustomer({ challengeId, code: CODE, phone, name, joinedVia: 'COUNTER', staffId: cashier.id, branchId: branch.id });
+    return { phone, customerId: result.customer.id };
+  }
+
+  it('registers a customer with the welcome stamp, and no password yet', async () => {
+    const { phone, customerId } = await register();
+    expect((await cardOf(customerId)).stamps).toBe(1);
+    expect(await db().customer.findUniqueOrThrow({ where: { id: customerId } })).toMatchObject({ phone, joinedVia: 'COUNTER', createdById: cashier.id, passwordHash: null, name: 'Registered Customer' });
+  });
+
+  it('refuses a number that already has a card, and a code that was sent to another number', async () => {
+    const { phone } = await register();
+    await expect(requestRegistrationCode({ phone, ipHash: null })).rejects.toMatchObject({ code: 'PHONE_TAKEN' });
+
+    const other = uniquePhone();
+    const { challengeId } = await requestRegistrationCode({ phone: other, ipHash: null });
+    await expect(registerCustomer({ challengeId, code: CODE, phone: uniquePhone(), name: 'Someone', joinedVia: 'COUNTER', staffId: cashier.id, branchId: branch.id })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+    expect(await db().customer.count({ where: { phone: other } })).toBe(0);
+  });
+
+  it('does not register with a wrong code', async () => {
+    const phone = uniquePhone();
+    const { challengeId } = await requestRegistrationCode({ phone, ipHash: null });
+    await expect(registerCustomer({ challengeId, code: '999999', phone, name: 'Nobody', joinedVia: 'COUNTER', staffId: cashier.id, branchId: branch.id })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+    expect(await db().customer.count({ where: { phone } })).toBe(0);
+  });
+
+  it('signs in the first time with the one-time password, then asks for their own, and the one-time password stops working', async () => {
+    const { phone, customerId } = await register();
+    const first = await loginWithPassword({ phone, password: CODE, ...meta });
+    expect(first).toMatchObject({ customerId, passwordSet: false, profileComplete: true });
     const session = await readCustomerSession();
-    expect(session?.customerId).toBe(result.customerId);
-    expect((await cardOf(result.customerId)).stamps).toBe(1);
-    expect(await db().customer.findUniqueOrThrow({ where: { id: result.customerId } })).toMatchObject({ phone, joinedVia: 'APP', name: null });
-  });
+    expect(session?.customerId).toBe(customerId);
 
-  it('signs an existing customer in to the same card', async () => {
-    const phone = uniquePhone();
-    const first = await completeCustomerLogin({ challengeId: (await requestCustomerCode({ phone, ipHash: null })).challengeId, code: CODE, ...meta });
+    await setFirstPassword({ customerId, sessionId: session!.sessionId, password: PASSWORD });
+    await expect(setFirstPassword({ customerId, sessionId: session!.sessionId, password: 'another-password-9' })).rejects.toMatchObject({ code: 'CONFLICT' });
+
     jar.clear();
-    // Asking again straight away is rate limited (30 seconds between codes)...
-    await expect(requestCustomerCode({ phone, ipHash: null })).rejects.toMatchObject({ code: 'OTP_RATE_LIMITED' });
-    // ...so issue the second code as if 40 seconds had passed.
-    const { challengeId } = await issueOtp({ purpose: 'CUSTOMER_LOGIN', phone, ipHash: null, now: sec(40) });
-    const again = await completeCustomerLogin({ challengeId, code: CODE, ...meta });
-    expect(again).toMatchObject({ customerId: first.customerId, isNew: false });
-    expect(await db().customer.count({ where: { phone } })).toBe(1); // one number, one account
+    await expect(loginWithPassword({ phone, password: CODE, ...meta })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    expect(await readCustomerSession()).toBeNull();
+    await expect(loginWithPassword({ phone, password: PASSWORD, ...meta })).resolves.toMatchObject({ customerId, passwordSet: true });
+    expect(await readCustomerSession()).not.toBeNull();
   });
 
-  it('does not sign in with a wrong code', async () => {
-    const { challengeId } = await requestCustomerCode({ phone: uniquePhone(), ipHash: null });
-    await expect(completeCustomerLogin({ challengeId, code: '999999', ...meta })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+  it('refuses a short, obvious or phone-number password, and the one-time password itself', async () => {
+    const { phone, customerId } = await register();
+    await loginWithPassword({ phone, password: CODE, ...meta });
+    const sessionId = (await readCustomerSession())!.sessionId;
+    for (const password of ['short', '11111111', '12345678', `${phone.slice(-10)}x`, CODE]) {
+      await expect(setFirstPassword({ customerId, sessionId, password })).rejects.toMatchObject({ code: 'VALIDATION' });
+    }
+    expect((await db().customer.findUniqueOrThrow({ where: { id: customerId } })).passwordHash).toBeNull();
+  });
+
+  it('answers a wrong number and a wrong password the same way', async () => {
+    const { phone } = await register();
+    await expect(loginWithPassword({ phone: uniquePhone(), password: PASSWORD, ...meta })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    await expect(loginWithPassword({ phone, password: 'not-the-password', ...meta })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
     expect(await readCustomerSession()).toBeNull();
   });
 
-  it('ends on sign-out, on sign-out everywhere, after 90 days and when the customer is deleted', async () => {
-    const phone = uniquePhone();
-    const { customerId } = await completeCustomerLogin({ challengeId: (await requestCustomerCode({ phone, ipHash: null })).challengeId, code: CODE, ...meta });
-    expect(await readCustomerSession()).not.toBeNull();
+  it('locks the account for 15 minutes after five wrong passwords, even for the right one', async () => {
+    const { phone } = await register();
+    for (let i = 0; i < 5; i++) await expect(loginWithPassword({ phone, password: 'wrong-password-1', ...meta })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    await expect(loginWithPassword({ phone, password: CODE, ...meta })).rejects.toMatchObject({ code: 'ACCOUNT_LOCKED' });
+    await expect(loginWithPassword({ phone, password: CODE, now: sec(16 * 60), ...meta })).resolves.toMatchObject({ passwordSet: false });
+  });
 
+  it('resets a forgotten password with a code, signs the customer out everywhere, and the reset works once', async () => {
+    const { phone, customerId } = await register();
+    await loginWithPassword({ phone, password: CODE, ...meta });
+    await setFirstPassword({ customerId, sessionId: (await readCustomerSession())!.sessionId, password: PASSWORD });
+    const token = jar.get('cj_c')!;
+
+    const { challengeId } = await requestPasswordReset({ phone, ipHash: null });
+    await expect(confirmPasswordReset({ challengeId, code: '000000' })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+    const { resetToken } = await confirmPasswordReset({ challengeId, code: CODE });
+    await expect(resetPassword({ resetToken, password: 'short' })).rejects.toMatchObject({ code: 'VALIDATION' });
+    await resetPassword({ resetToken, password: 'a-brand-new-password-7' });
+
+    jar.set('cj_c', token); // the old session was ended by the reset
+    expect(await readCustomerSession()).toBeNull();
+    await expect(loginWithPassword({ phone, password: PASSWORD, ...meta })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    await expect(loginWithPassword({ phone, password: 'a-brand-new-password-7', ...meta })).resolves.toMatchObject({ customerId, passwordSet: true });
+    await expect(resetPassword({ resetToken, password: 'yet-another-password-3' })).rejects.toMatchObject({ code: 'OTP_INVALID' }); // already used
+  });
+
+  it('gives a forgotten-password answer that does not reveal whether a number has an account', async () => {
+    const stranger = await requestPasswordReset({ phone: uniquePhone(), ipHash: null });
+    expect(stranger.challengeId).toMatch(/^[0-9a-f-]{36}$/);
+    await expect(confirmPasswordReset({ challengeId: stranger.challengeId, code: CODE })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+  });
+
+  it('refuses a reset token that has expired or was tampered with', async () => {
+    const { phone } = await register();
+    const { challengeId } = await requestPasswordReset({ phone, ipHash: null });
+    const { resetToken } = await confirmPasswordReset({ challengeId, code: CODE });
+    await expect(resetPassword({ resetToken, password: 'a-brand-new-password-7', now: sec(11 * 60) })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+    await expect(resetPassword({ resetToken: `${resetToken.slice(0, -2)}xx`, password: 'a-brand-new-password-7' })).rejects.toMatchObject({ code: 'OTP_INVALID' });
+  });
+
+  it('ends a session on sign-out, on sign-out everywhere, after 90 days and when the customer is deleted', async () => {
+    const { phone, customerId } = await register();
+    await loginWithPassword({ phone, password: CODE, ...meta });
+    expect(await readCustomerSession()).not.toBeNull();
     expect(await readCustomerSession(new Date(Date.now() + 91 * 86_400_000))).toBeNull();
 
     await endSession('customer');
     expect(await readCustomerSession()).toBeNull();
 
-    const { challengeId } = await issueOtp({ purpose: 'CUSTOMER_LOGIN', phone, ipHash: null, now: sec(40) });
-    await completeCustomerLogin({ challengeId, code: CODE, ...meta });
+    await loginWithPassword({ phone, password: CODE, ...meta });
     const token = jar.get('cj_c')!;
     await revokeAllSessions({ customerId });
     jar.set('cj_c', token); // the same cookie, now revoked on the server
     expect(await readCustomerSession()).toBeNull();
 
-    const { challengeId: third } = await issueOtp({ purpose: 'CUSTOMER_LOGIN', phone, ipHash: null, now: sec(80) });
-    await completeCustomerLogin({ challengeId: third, code: CODE, ...meta });
+    await loginWithPassword({ phone, password: CODE, ...meta });
     await db().customer.update({ where: { id: customerId }, data: { deletedAt: new Date() } });
     expect(await readCustomerSession()).toBeNull();
   });
@@ -199,6 +284,15 @@ describe('staff sign-in (CA-18, MG-21)', () => {
     await expect(completeStaffLogin({ challengeId: step1.challengeId, code: '000000', ...meta })).rejects.toMatchObject({ code: 'OTP_INVALID' });
     await completeStaffLogin({ challengeId: step1.challengeId, code: CODE, ...meta });
     expect(await readStaffSession()).toMatchObject({ staff: { id: manager.id, role: 'MANAGER' }, branchId: branch.id });
+  });
+
+  it('keeps cashiers out of the management sign-in, with the same answer as a wrong PIN', async () => {
+    const cashier = await makeStaff('CASHIER', [branch.id], { pin: PIN });
+    await expect(loginWithPin({ phone: cashier.phone, pin: PIN, area: 'admin', ...meta })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    expect(await readStaffSession()).toBeNull();
+    await expect(loginWithPin({ phone: cashier.phone, pin: PIN, area: 'cashier', ...meta })).resolves.toMatchObject({ status: 'ok' });
+    const manager = await makeStaff('MANAGER', [branch.id], { pin: PIN });
+    await expect(loginWithPin({ phone: manager.phone, pin: PIN, area: 'admin', ...meta })).resolves.toMatchObject({ status: 'otp_required' });
   });
 
   it('does not let a customer code be used as a staff code', async () => {

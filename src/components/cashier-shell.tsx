@@ -80,7 +80,7 @@ export function CashierShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="flex flex-wrap items-center gap-2">
           {isManagement && (
-            <ButtonLink href="/owner" variant="secondary" size="sm">
+            <ButtonLink href="/admin" variant="secondary" size="sm">
               <LayoutDashboard size={18} aria-hidden="true" />
               {tx('ম্যানেজমেন্ট', 'Management')}
             </ButtonLink>

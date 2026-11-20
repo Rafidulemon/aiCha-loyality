@@ -34,14 +34,14 @@ type NavItem = {
  * (to look at, the owner edits it), Offers and SMS; the owner also gets Staff and Settings. The server checks every request again.
  */
 const NAV: NavItem[] = [
-  { href: '/owner', bn: 'ড্যাশবোর্ড', en: 'Dashboard', Icon: LayoutGrid, chip: '#7FD8CE', show: 'dashboard.view' },
-  { href: '/owner/customers', bn: 'গ্রাহক', en: 'Customers', Icon: Users, chip: '#FEAD28', show: 'customers.list' },
-  { href: '/owner/program', bn: 'লয়্যালটি কার্ড', en: 'Loyalty card', Icon: CreditCard, chip: '#FF8A9A', show: 'dashboard.view' },
-  { href: '/owner/offers', bn: 'অফার', en: 'Offers', Icon: Tag, chip: '#E6012C', show: 'offers.manage' },
-  { href: '/owner/staff', bn: 'স্টাফ', en: 'Staff', Icon: UserCog, chip: '#8FE3D8', show: 'staff.manage' },
-  { href: '/owner/sms', bn: 'SMS', en: 'SMS', Icon: MessageSquare, chip: '#7FCBFF', show: 'sms.send' },
+  { href: '/admin', bn: 'ড্যাশবোর্ড', en: 'Dashboard', Icon: LayoutGrid, chip: '#7FD8CE', show: 'dashboard.view' },
+  { href: '/admin/customers', bn: 'গ্রাহক', en: 'Customers', Icon: Users, chip: '#FEAD28', show: 'customers.list' },
+  { href: '/admin/program', bn: 'লয়্যালটি কার্ড', en: 'Loyalty card', Icon: CreditCard, chip: '#FF8A9A', show: 'dashboard.view' },
+  { href: '/admin/offers', bn: 'অফার', en: 'Offers', Icon: Tag, chip: '#E6012C', show: 'offers.manage' },
+  { href: '/admin/staff', bn: 'স্টাফ', en: 'Staff', Icon: UserCog, chip: '#8FE3D8', show: 'staff.manage' },
+  { href: '/admin/sms', bn: 'SMS', en: 'SMS', Icon: MessageSquare, chip: '#7FCBFF', show: 'sms.send' },
   // A manager has no link here, but the page shows the outlets read-only if they open it.
-  { href: '/owner/settings', bn: 'সেটিংস', en: 'Settings', Icon: Settings, chip: '#B8D4CF', show: 'outlets.manage', open: 'dashboard.view' },
+  { href: '/admin/settings', bn: 'সেটিংস', en: 'Settings', Icon: Settings, chip: '#B8D4CF', show: 'outlets.manage', open: 'dashboard.view' },
 ];
 
 const roleOf = (staff: StaffMeDto) => staff.role.toUpperCase() as StaffRole;
@@ -112,13 +112,13 @@ function Frame({ staff, children }: { staff: StaffMeDto | null; children: ReactN
   const { tx } = useI18n();
   const role = staff ? roleOf(staff) : null;
   const items = role ? NAV.filter((i) => can(role, i.show)) : [];
-  const isActive = (href: string) => (href === '/owner' ? path === href : path === href || path.startsWith(`${href}/`));
+  const isActive = (href: string) => (href === '/admin' ? path === href : path === href || path.startsWith(`${href}/`));
 
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
       <aside className="flex flex-col gap-3 border-b border-line bg-surface px-4 py-3 shadow-soft lg:sticky lg:top-0 lg:h-dvh lg:w-[260px] lg:shrink-0 lg:gap-6 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-4 lg:py-6">
         <div className="flex items-center justify-between gap-3 px-2">
-          <BrandLogo href="/owner" />
+          <BrandLogo href="/admin" />
           {staff ? <Account staff={staff} variant="bar" /> : <Skeleton className="h-11 w-24 lg:hidden" />}
         </div>
         <nav aria-label={tx('ড্যাশবোর্ড মেনু', 'Dashboard menu')} aria-busy={!staff} className="-mx-1 flex gap-1 overflow-x-auto px-1 lg:flex-col lg:overflow-visible">
@@ -158,7 +158,7 @@ function NoAccess() {
       <span className="flex size-14 items-center justify-center rounded-2xl bg-danger-soft text-danger"><ShieldOff size={28} aria-hidden="true" /></span>
       <h1 className="font-display text-3xl font-bold">{tx('এই পাতায় আপনার প্রবেশাধিকার নেই', 'You do not have access to this page')}</h1>
       <p className="text-muted">{tx('এটি শুধু মালিকের জন্য। আপনি যা ব্যবহার করতে পারেন তা মেনুতে আছে।', 'This page is for the owner only. The pages you can use are in the menu.')}</p>
-      <ButtonLink href="/owner">{tx('ড্যাশবোর্ডে ফিরুন', 'Back to the dashboard')}</ButtonLink>
+      <ButtonLink href="/admin">{tx('ড্যাশবোর্ডে ফিরুন', 'Back to the dashboard')}</ButtonLink>
     </div>
   );
 }

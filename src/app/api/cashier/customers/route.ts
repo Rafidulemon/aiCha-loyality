@@ -1,5 +1,6 @@
 import { db } from '@/server/db';
-import { createCustomer, searchCustomers, todaysCustomers } from '@/server/domain/customers';
+import { registerCustomer } from '@/server/auth/customer';
+import { searchCustomers, todaysCustomers } from '@/server/domain/customers';
 import { cashierCustomerView } from '@/server/domain/views';
 import { created, staffRoute } from '@/server/http';
 import { cashierCustomersQuery, createCustomerRequest } from '@/lib/contracts/schemas';
@@ -16,12 +17,12 @@ export const GET = staffRoute({ permission: 'customers.search', query: cashierCu
   return { mode: 'today', items };
 });
 
-/** Add a new customer at the counter (CA-03). They start with the welcome stamp when the program gives one (BR-17). */
+/**
+ * Add a new customer at the counter (CA-03), after the code sent to their phone was typed in (see ./code). They start with the welcome
+ * stamp when the program gives one (BR-17) and are sent their loyalty ID and a one-time password.
+ */
 export const POST = staffRoute({ permission: 'counter.work', body: createCustomerRequest }, async ({ staff, body }) => {
   const now = new Date();
-  const result = await db().$transaction(
-    (tx) => createCustomer(tx, { phone: body.phone, name: body.name, smsConsent: body.smsConsent, joinedVia: 'COUNTER', createdById: staff.staff.id, branchId: staff.branchId, at: now }),
-    { maxWait: 10_000, timeout: 20_000 },
-  );
+  const result = await registerCustomer({ ...body, joinedVia: 'COUNTER', staffId: staff.staff.id, branchId: staff.branchId, now });
   return created(await cashierCustomerView(db(), { customerId: result.customer.id, role: staff.staff.role, now }));
 });

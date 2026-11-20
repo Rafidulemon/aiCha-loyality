@@ -31,8 +31,15 @@ const id = z.uuid();
 // Sign-in
 // ---------------------------------------------------------------------------------------------
 
-export const customerOtpRequest = z.object({ phone });
-export const customerOtpVerify = z.object({ challengeId: id, code, language: z.enum(['bn', 'en']).optional() });
+/** The password is not length-checked here: a wrong one must get the same answer as any other. The rules apply when one is chosen. */
+export const customerLogin = z.object({ phone, password: z.string().min(1).max(100) });
+export const newPassword = z.string().min(1, 'Enter a password').max(72, 'That password is too long');
+export const setPasswordRequest = z.object({ password: newPassword });
+export const passwordForgot = z.object({ phone });
+export const passwordVerify = z.object({ challengeId: id, code });
+export const passwordReset = z.object({ resetToken: z.string().min(20).max(400), password: newPassword });
+/** Staff asking for a code to be sent to a customer's phone, before registering them. */
+export const registrationCodeRequest = z.object({ phone });
 
 /**
  * A browser's push subscription, as PushSubscription.toJSON() gives it. The address must be a real push service (see
@@ -47,7 +54,8 @@ export const pushSubscribe = z.object({
 });
 export const pushUnsubscribe = z.object({ endpoint: z.string().min(10).max(2048) });
 
-export const staffLogin = z.object({ phone, pin, branchId: id.optional() });
+/** `area` is the sign-in page used: the management sign-in refuses a cashier. */
+export const staffLogin = z.object({ phone, pin, branchId: id.optional(), area: z.enum(['cashier', 'admin']).optional() });
 export const staffOtpVerify = z.object({ challengeId: id, code, branchId: id.optional() });
 
 export const logoutRequest = z.object({ scope: z.enum(['customer', 'staff']), everywhere: z.boolean().optional() });
@@ -99,6 +107,9 @@ export const createCustomerRequest = z.object({
   name,
   phone,
   smsConsent: z.boolean().optional(),
+  /** The code that was sent to the customer's phone (see registrationCodeRequest) and the challenge it belongs to. */
+  challengeId: id,
+  code,
 });
 
 export const scanRequest = z.object({ token: z.string().min(20).max(400) });
@@ -205,8 +216,7 @@ export type StaffCreate = z.infer<typeof staffCreate>;
 export type StaffUpdate = z.infer<typeof staffUpdate>;
 export type SmsCampaignCreate = z.infer<typeof smsCampaignCreate>;
 
-export type CustomerOtpRequest = z.infer<typeof customerOtpRequest>;
-export type CustomerOtpVerify = z.infer<typeof customerOtpVerify>;
+export type CustomerLogin = z.infer<typeof customerLogin>;
 export type StaffLogin = z.infer<typeof staffLogin>;
 export type StaffOtpVerify = z.infer<typeof staffOtpVerify>;
 export type ProfileUpdate = z.infer<typeof profileUpdate>;

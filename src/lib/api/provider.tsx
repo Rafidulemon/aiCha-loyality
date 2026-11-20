@@ -3,13 +3,13 @@
 import { useEffect, type ReactNode } from 'react';
 import { SWRConfig } from 'swr';
 import { fetcher, isApiError, setSignedOutHandler } from './client';
+import { signInPathFor } from './session';
 
-/** Where to send someone whose session has ended. Staff screens go to the staff sign-in, everything else to the customer one. */
+/** Where to send someone whose session has ended: each app has its own sign-in (see signInPathFor). */
 function toSignIn() {
   const path = window.location.pathname;
-  if (path === '/login' || path === '/staff/login') return;
-  const staff = path.startsWith('/cashier') || path.startsWith('/owner');
-  window.location.assign(`${staff ? '/staff/login' : '/login'}?next=${encodeURIComponent(path)}`);
+  if (path.startsWith('/auth/')) return;
+  window.location.assign(`${signInPathFor(path)}?next=${encodeURIComponent(path)}`);
 }
 
 /**

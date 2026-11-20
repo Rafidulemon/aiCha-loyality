@@ -150,7 +150,7 @@ export async function eraseCustomer(tx: Tx, customerId: string, ctx: RequestCont
   if (!found) throw fail.notFound('Customer');
   await tx.customer.update({
     where: { id: customerId },
-    data: { deletedAt: at, name: null, phone: `deleted:${customerId}`, birthday: null, email: null, internalNote: null, smsConsent: false, profileCompletedAt: null },
+    data: { deletedAt: at, name: null, phone: `deleted:${customerId}`, birthday: null, email: null, internalNote: null, smsConsent: false, profileCompletedAt: null, passwordHash: null, oneTimePasswordHash: null },
   });
   await tx.notification.deleteMany({ where: { customerId } });
   await tx.pushSubscription.deleteMany({ where: { customerId } });

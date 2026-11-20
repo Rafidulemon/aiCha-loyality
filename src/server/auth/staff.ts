@@ -25,7 +25,7 @@ type StaffWithBranches = { id: string; role: StaffRole; active: boolean; branche
 
 export type StaffLoginResult = { status: 'ok'; staffId: string } | { status: 'otp_required'; challengeId: string; expiresInSec: number; resendAfterSec: number };
 
-export async function loginWithPin(input: { phone: string; pin: string; branchId?: string; ipHash: string | null; userAgent: string | null; now?: Date }): Promise<StaffLoginResult> {
+export async function loginWithPin(input: { phone: string; pin: string; branchId?: string; /** The sign-in page used: the management one is not for cashiers. */ area?: 'cashier' | 'admin'; ipHash: string | null; userAgent: string | null; now?: Date }): Promise<StaffLoginResult> {
   const now = input.now ?? new Date();
   const staff = await db().staff.findUnique({ where: { phone: input.phone }, include: { branches: { select: { branchId: true } } } });
 
@@ -43,6 +43,8 @@ export async function loginWithPin(input: { phone: string; pin: string; branchId
     throw fail.unprocessable('INVALID_CREDENTIALS', 'Wrong phone number or PIN');
   }
   if (staff.failedPinAttempts > 0) await db().staff.update({ where: { id: staff.id }, data: { failedPinAttempts: 0 } });
+  // A cashier who finds the management sign-in gets the same answer as a wrong PIN, and no session.
+  if (input.area === 'admin' && staff.role === 'CASHIER') throw fail.unprocessable('INVALID_CREDENTIALS', 'Wrong phone number or PIN');
 
   // Fail early on a bad outlet choice, before a code is sent.
   await resolveBranch(staff, input.branchId);

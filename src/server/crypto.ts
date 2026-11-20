@@ -54,21 +54,51 @@ export function generateVoucherCode(): string {
 const SCRYPT = { N: 2 ** 15, r: 8, p: 1, keylen: 32 } as const;
 const SCRYPT_MAXMEM = 64 * 1024 * 1024;
 
-export async function hashPin(pin: string): Promise<string> {
+/** Peppered scrypt hash of a secret. `label` keeps a hash made for one purpose from being valid for another (a PIN is not a password). */
+async function hashSecret(label: string, secret: string): Promise<string> {
   const salt = randomBytes(16);
-  const key = await scryptAsync(hmac('pin', pin), salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT_MAXMEM });
+  const key = await scryptAsync(hmac(label, secret), salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT_MAXMEM });
   return `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString('base64')}$${key.toString('base64')}`;
 }
 
-export async function verifyPin(pin: string, stored: string | null): Promise<boolean> {
+async function verifySecret(label: string, secret: string, stored: string | null): Promise<boolean> {
   if (!stored) {
-    // Spend about the same time as a real check, so "no such PIN" is not visible in the response time.
-    await scryptAsync(hmac('pin', pin), 'dummy-salt-dummy', SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT_MAXMEM });
+    // Spend about the same time as a real check, so "no such secret" is not visible in the response time.
+    await scryptAsync(hmac(label, secret), 'dummy-salt-dummy', SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT_MAXMEM });
     return false;
   }
   const [scheme, n, r, p, salt, hash] = stored.split('$');
   if (scheme !== 'scrypt' || !n || !r || !p || !salt || !hash) return false;
   const expected = Buffer.from(hash, 'base64');
-  const key = await scryptAsync(hmac('pin', pin), Buffer.from(salt, 'base64'), expected.length, { N: Number(n), r: Number(r), p: Number(p), maxmem: SCRYPT_MAXMEM });
+  const key = await scryptAsync(hmac(label, secret), Buffer.from(salt, 'base64'), expected.length, { N: Number(n), r: Number(r), p: Number(p), maxmem: SCRYPT_MAXMEM });
   return key.length === expected.length && timingSafeEqual(key, expected);
+}
+
+export const hashPin = (pin: string) => hashSecret('pin', pin);
+export const verifyPin = (pin: string, stored: string | null) => verifySecret('pin', pin, stored);
+
+/** A customer's own password, and the one-time password sent to a newly registered customer. */
+export const hashPassword = (password: string) => hashSecret('password', password);
+export const verifyPassword = (password: string, stored: string | null) => verifySecret('password', password, stored);
+export const hashOneTimePassword = (value: string) => hashSecret('one-time-password', value);
+export const verifyOneTimePassword = (value: string, stored: string | null) => verifySecret('one-time-password', value, stored);
+
+// ---------------------------------------------------------------------------------------------
+// Signed, short-lived tokens (for the "set a new password" step after a reset code was confirmed)
+// ---------------------------------------------------------------------------------------------
+
+/** `payload.signature`, both base64url. The signature is keyed with AUTH_SECRET and labelled, so it cannot be used for anything else. */
+export function signToken(label: string, payload: object): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${body}.${hmac(`token:${label}`, body)}`;
+}
+
+export function readToken<T>(label: string, token: string): T | null {
+  const [body, sig] = token.split('.');
+  if (!body || !sig || !safeEqual(sig, hmac(`token:${label}`, body))) return null;
+  try {
+    return JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as T;
+  } catch {
+    return null;
+  }
 }
