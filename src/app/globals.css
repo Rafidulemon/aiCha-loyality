@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #faf7f4;
+  --surface: #ffffff;
+  --surface-2: #f4efea;
+  --line: #ebe4dd;
+  --line-2: #d8cec5;
+  --ink: #201b18;
+  --muted: #6b635d;
+  --shadow-soft: 0 1px 2px rgba(32, 27, 24, 0.04), 0 8px 24px -10px rgba(32, 27, 24, 0.14);
+  --shadow-lift: 0 2px 4px rgba(32, 27, 24, 0.05), 0 18px 40px -14px rgba(32, 27, 24, 0.22);
+  --gold: #c8891a;
+  --brand: #e6012c;
+  --on-brand: #ffffff;
+  --brand-soft: #fde6ea;
+  --brand-ink: #c90025;
+  --brand-dark: #b8001f;
+  --tangerine-soft: #fff1d6;
+  --rose-soft: #ffe3e7;
+  --rose-ink: #8a1c2c;
+  --aqua-soft: #d8f5f2;
+  --sky-soft: #ddf1ff;
+  --ok: #06604a;
+  --warn: #7a3b00;
+  --info: #0b4f7a;
+  --danger: #b42318;
+  --danger-soft: #fee4e2;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #141211;
+  --surface: #1e1b19;
+  --surface-2: #29251f;
+  --line: #342f2a;
+  --line-2: #504942;
+  --ink: #f8f3ed;
+  --muted: #b5aea6;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -10px rgba(0, 0, 0, 0.6);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 40px -14px rgba(0, 0, 0, 0.7);
+  --gold: #f3b440;
+  --brand: #e6012c;
+  --on-brand: #ffffff;
+  --brand-soft: #45121c;
+  --brand-ink: #ff8a9e;
+  --brand-dark: #c90025;
+  --tangerine-soft: #45310a;
+  --rose-soft: #3d1a22;
+  --rose-ink: #ffc2cb;
+  --aqua-soft: #103a36;
+  --sky-soft: #10304a;
+  --ok: #7ef0c8;
+  --warn: #ffc9b8;
+  --info: #9ed8ff;
+  --danger: #ff9a90;
+  --danger-soft: #3d1a18;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    background-image: radial-gradient(900px 420px at 100% -10%, rgba(254, 173, 40, 0.10), transparent 70%), radial-gradient(700px 380px at -10% 0%, rgba(230, 1, 44, 0.06), transparent 70%);
+    background-repeat: no-repeat;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 3px solid #FEAD28;
+    outline-offset: 2px;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted);
+    opacity: 0.8;
+  }
+}
+
+/* Cross-fade used by smoothTransition() when switching theme or language. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 350ms;
+  animation-timing-function: ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
