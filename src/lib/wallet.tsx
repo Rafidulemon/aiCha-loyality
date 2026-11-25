@@ -4,8 +4,8 @@
  * The customer app's view of the server: the signed-in customer's card, vouchers, claimed offers and the offers that are live.
  * One provider (mounted in the customer layout) loads it, and every customer screen reads it with `useWallet()`.
  *
- * How a stamp added at the counter reaches the phone (NF-04): the app asks a tiny version number every 2 seconds while the screen
- * is visible, and loads the whole wallet only when that number changes. When the new wallet has more stamps, or a new card
+ * How a stamp added at the counter reaches the phone (NF-04): the app asks a tiny version number every 2 seconds for the first minute
+ * after the screen opens (then every 15 seconds, and not at all while hidden), and loads the whole wallet only when that number changes. When the new wallet has more stamps, or a new card
  * reward, the provider raises `pulse` (the stamp animation and the toast) and `unlocked` (the "Reward unlocked" dialog).
  */
 
@@ -51,12 +51,35 @@ type WalletValue = {
 
 const WalletContext = createContext<WalletValue | null>(null);
 
+/** How often the app asks the version number: quickly right after the screen opens or something changes, slowly otherwise. */
+const FAST_POLL_MS = 2000;
+const SLOW_POLL_MS = 15_000;
+const FAST_WINDOW_MS = 60_000;
+
 const memberCode = (no: number) => `CJ-${String(no).padStart(6, '0')}`;
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { data, mutate } = useSWR<WalletDto>('/api/me/wallet', { refreshInterval: 60_000, revalidateOnFocus: true, keepPreviousData: true });
-  // Every 2 seconds while the screen is visible: a stamp shows within the 3 seconds the business documentation asks for (NF-04).
-  const { data: version } = useSWR<{ v: string }>('/api/me/version', { refreshInterval: 2000, revalidateOnFocus: true, dedupingInterval: 1000 });
+  // Every 2 seconds for the first minute after the screen opens or comes back (and after any change), then every 15 seconds. The customer
+  // who is waiting at the counter sees the stamp within the 3 seconds the business documentation asks for (NF-04), while a phone left open
+  // on a table asks 7 times less often, which keeps the database asleep between customers. Hidden screens do not ask at all (SWR default).
+  const fastUntil = useRef(Date.now() + FAST_WINDOW_MS);
+  useEffect(() => {
+    const wake = () => {
+      if (!document.hidden) fastUntil.current = Date.now() + FAST_WINDOW_MS;
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    return () => {
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+    };
+  }, []);
+  const { data: version } = useSWR<{ v: string }>('/api/me/version', {
+    refreshInterval: () => (Date.now() < fastUntil.current ? FAST_POLL_MS : SLOW_POLL_MS),
+    revalidateOnFocus: true,
+    dedupingInterval: 1000,
+  });
   const [pulse, setPulse] = useState<Pulse | null>(null);
   const [unlocked, setUnlocked] = useState<string | null>(null);
 
@@ -64,7 +87,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const lastVersion = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!version) return;
-    if (lastVersion.current !== undefined && lastVersion.current !== version.v) void mutate();
+    if (lastVersion.current !== undefined && lastVersion.current !== version.v) {
+      fastUntil.current = Date.now() + FAST_WINDOW_MS; // something just changed: keep watching closely for a while
+      void mutate();
+    }
     lastVersion.current = version.v;
   }, [version, mutate]);
 
